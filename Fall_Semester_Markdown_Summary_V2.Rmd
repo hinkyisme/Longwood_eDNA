@@ -1,0 +1,628 @@
+---
+title: "Private Alleles Summary"
+author: "Hannah Newton and Jameson Hinkle"
+date: "2024-12-13"
+output: pdf_document
+---
+```{r, echo = FALSE}
+library(knitr)
+opts_chunk$set(tidy.opts=list(width.cutoff=30),tidy=TRUE)
+require(magrittr)
+require(dplyr)
+library(agricolae)
+require(ggpubr)
+require(ggplot2)
+require(tidyverse)
+require(patchwork)
+require(grid)
+require(gridExtra)
+require(plyr)
+require(VCA)
+require(lme4)
+require(data.table)
+```
+The following is a summary of our work through the fall semester of 2024.  Through the URAP program at Longwood University, Hannah Newton worked to summarize the effects of private alleles for our Bull Trout simulation of various barrier scenarios. During the fall semester, this research was built on by examining variances in data and normalizing it. Interest in the variance of the data came from a narrative standpoint versus a more empirical evaluation. Results are not true measures of the real world and we are instead looking for broad trends within the data that we hope to derive biological reasoning from. For our purposes, a private allele is any allele present for a locus that is only present in one of our sub-watershed patches and no other watershed or patch (Tacoma, LeClerc, Sullivan) in our simulation space.  See script below for specifics.
+
+```{r, echo=TRUE, eval = FALSE}
+
+
+test <- read_csv("comdata.csv")
+test$source <- as.factor(test$source) #To classify scenarios as a factor.
+test2 <- test %>% mutate(Scenario = ifelse(grepl("res", test$source), "Resident", "Migratory")) # define scenarios as resident or migratory for plotting
+test2$Scenario <- as.factor(test2$Scenario) #Make scenario a factor
+aggregated_counts <- aggregate(Allele_Count ~ Scenario + gen + source, data = test2, FUN = sum)
+test3 <- test2 %>%
+  left_join(aggregated_counts, by = c("Scenario", "gen", "source"))
+test3$Scenario <- as.character(test3$Scenario) # will need to be character class and ungrouped ahead of specifying specific dam scenarios.
+test4 <- test3 %>% mutate(Barrier = case_when(grepl("riv", test3$source) ~ "Riverine", 
+                                              grepl("mp", test3$source) ~ "MillPondRemoved", 
+                                              grepl("02", test3$source) ~ "BoxMPRemoved", 
+                                              grepl("all", test3$source) ~ "AllPlannedRemovals", 
+                                              grepl("bc", test3$source) ~ "BoxCanyonRemoved", 
+                                              grepl("culvonly", test3$source) ~ "CulvertsOnly", 
+                                              grepl("damsonly", test3$source) ~ "DamsOnly", 
+                                              grepl("exist", test3$source) ~ "ExistingBarriers", 
+                                              TRUE ~ "")) # assign real names to specific scenarios
+
+#FALL SEMESTER. Go to bottom for spring semester plots
+
+
+#Colors
+colors <- c("Resident" = "blue", "Migratory" = "red")
+
+#Average Frequency For Loop Not All Passable (nap)
+refine <- test4 %>%
+  select(Frequency, gen, Scenario)
+
+nap_results <- data.frame(gen = numeric(), Scenario = character(), Variance = numeric(), stringsAsFactors = FALSE) 
+
+nap_refine <- unique(refine[, c("gen", "Scenario")])
+
+for (i in 1:nrow(nap_refine)) {
+  nap_gen <- nap_refine$gen[i]
+  nap_scen <- nap_refine$Scenario[i]
+  
+  nap_subset <- refine[refine$gen == nap_gen & refine$Scenario == nap_scen, ]
+  
+  nap_var <- var(nap_subset$Frequency, na.rm = TRUE)
+  
+  nap_results <- rbind(nap_results, data.frame(gen = nap_gen, Scenario = nap_scen, Variance = nap_var))
+}
+
+#Plotting NAP
+res_nap <- nap_results %>%
+  filter((Scenario == "Resident")) %>%
+  select(Variance, gen, Scenario) 
+
+
+mig_nap <- nap_results %>%
+  filter(Scenario == "Migratory") %>%
+  select(Variance, gen, Scenario) 
+
+
+nap_plot <- bind_rows(res_nap, mig_nap)
+
+
+#ggplot(nap_plot, aes(x = gen, y = Variance, color = Scenario)) +
+#  geom_line() +
+#  geom_line(size = 1.2) +
+#  scale_color_manual(values = colors) + 
+#  labs(y = "Variance", x = "Generation") +
+#  theme_minimal()
+
+ggviolin(
+  nap_plot, 
+  y = "Variance", 
+  x = "Scenario", 
+  fill = "white",               
+  color = "black"               
+) +
+  labs(
+    title = "Variance Across All Scenarios (Passable and Impassable)",       
+    x = "Scenario",                            
+    y = "Variance"                             
+  ) +
+  theme_bw(base_size = 14) +                   
+  theme(
+    plot.title = element_text(hjust = 0.5),   
+    axis.text.x = element_text(angle = 45, hjust = 1),  
+    legend.position = "none"                  
+  )
+
+
+
+#Average Frequency For Loop All Passable (ap)
+#AP = All passable
+
+ap <- test4 %>%
+  filter(source != "mig_02") %>%
+  filter(source != "res_02") %>%
+  select(gen, Frequency, Scenario) 
+
+refine2 <- ap %>%
+  select(Frequency, gen, Scenario)
+
+ap_results <- data.frame(gen = numeric(), Scenario = character(), Variance = numeric(), stringsAsFactors = FALSE)
+
+ap_refine <- unique(refine2[, c("gen", "Scenario")])
+
+for (i in 1:nrow(ap_refine)) {
+  ap_gen <- ap_refine$gen[i]
+  ap_scen <- ap_refine$Scenario[i]
+  
+  ap_subset <- refine2[refine2$gen == ap_gen & refine2$Scenario == ap_scen, ]
+  
+  ap_var <- var(ap_subset$Frequency, na.rm = TRUE)
+  
+  ap_results <- rbind(ap_results, data.frame(gen = ap_gen, Scenario = ap_scen, Variance = ap_var))
+}
+
+
+#Plotting AP
+res_ap <- ap_results %>%
+  filter((Scenario == "Resident")) %>%
+  select(Variance, gen, Scenario) 
+
+
+mig_ap <- ap_results %>%
+  filter(Scenario == "Migratory") %>%
+  select(Variance, gen, Scenario) 
+
+
+ap_plot <- bind_rows(res_ap, mig_ap)
+
+#ggplot(ap_plot, aes(x = gen, y = Variance, color = Scenario)) +
+#  geom_line() +
+#  geom_line(size = 1.2) +
+#  scale_color_manual(values = colors) + 
+#  labs(y = "Variance", x = "Generation") +
+#  theme_minimal()
+
+ggviolin(
+  ap_plot, 
+  y = "Variance", 
+  x = "Scenario", 
+  fill = "white",               
+  color = "black"               
+) +
+  labs(
+    title = "Variance Across Passable Scenarios",       
+    x = "Scenario",                            
+    y = "Variance"                             
+  ) +
+  theme_bw(base_size = 14) +                   
+  theme(
+    plot.title = element_text(hjust = 0.5),   
+    axis.text.x = element_text(angle = 45, hjust = 1),  
+    legend.position = "none"                  
+  )
+```
+
+As shown above, temporal variance per each scenario by frequency were compared between all barrier scenarios and then again without those which were impassable and faceted by resident and migratory scenarios. Examinations of variance through time found no large differences between all scenarios versus only passable scenarios. There was only slightly greater spread for the former. It is likely that including impassable barriers may prompt more genetic differentiation across generations as a product of reduced gene flow and localized genetic drift.  
+
+All data was then faceted by watershed and normalized. Mean allele frequencies were determined for each watershed. A normalization factor was found by subtracting the mean value of one watershed from the sum of the means of all other watersheds. Each value within a watershed was divided by this normalization factor to create a normalized data frame of allele frequencies.
+
+```{r, echo=TRUE, eval = FALSE}
+##WATERSHED NORMALIZATION##
+wshed <- read_csv("WatershedIDsublevels.csv")
+wshed <- inner_join(test4_filter, wshed, by = "Stratum"). #WHAT IS THIS FILTER TO?  TEST4?
+
+##Biology first; Priority on purpose of plot; population structures
+
+normalize_data <- function(data, watershed_name, remove_watershed_val, count_col) {
+  map_dfr(1:nrow(data), function(i) {
+    count <- data[[count_col]][i]
+    gen <- data$gen[i]
+    scen <- data$Scenario[i]
+    norm_calc <- count / remove_watershed_val
+    data.frame(gen = gen, Normalization = norm_calc, Count = count, Scenario = scen)
+  }) %>%
+    mutate(Watershed = watershed_name)
+}
+
+plot_normalization <- function(data, watershed_name, data_type) {
+  ggviolin(data, y = "Normalization", x = "Scenario") +
+    theme_bw() +
+    ggtitle(paste("Normalized To", watershed_name, "Watershed -", data_type))
+}
+
+calculate_mean <- function(data, col) {
+  mean(data[[col]])
+}
+
+process_watershed_data <- function(wshed, watershed_name, means_list, freq_means_list, count_col, freq_col) {
+  norm_data <- wshed %>%
+    filter(watershed == watershed_name) %>%
+    select(!!count_col, gen, Scenario)
+  mean_val <- calculate_mean(norm_data, count_col)
+  means_list[[watershed_name]] <- mean_val
+  norm_results <- normalize_data(norm_data, watershed_name, means_list[[watershed_name]], count_col)
+  
+  count_plot <- plot_normalization(norm_results, watershed_name, "Counts")
+  
+  norm_data_freq <- wshed %>%
+    filter(watershed == watershed_name) %>%
+    select(!!freq_col, gen, Scenario)
+  mean_val_freq <- calculate_mean(norm_data_freq, freq_col)
+  freq_means_list[[watershed_name]] <- mean_val_freq
+  norm_results_freq <- normalize_data(norm_data_freq, watershed_name, freq_means_list[[watershed_name]], freq_col)
+  
+  freq_plot <- plot_normalization(norm_results_freq, watershed_name, "Frequency")
+  
+  return(list(count_plot = count_plot, freq_plot = freq_plot))
+}
+
+watersheds <- c("Sullivan", "Tacoma", "LeClerc", "PendOreilleMS")
+
+means_list <- list()
+freq_means_list <- list()
+
+count_plots <- list()
+freq_plots <- list()
+
+for (watershed in watersheds) {
+  plots <- process_watershed_data(wshed, watershed, means_list, freq_means_list, "Allele_Count.y", "Frequency")
+  count_plots[[watershed]] <- plots$count_plot
+  freq_plots[[watershed]] <- plots$freq_plot
+}
+
+# Arrange count plots into a 2x2 grid
+count_grid <- ggarrange(
+  plotlist = count_plots, 
+  ncol = 2, nrow = 2
+)
+
+# Arrange frequency plots into a 2x2 grid
+freq_grid <- ggarrange(
+  plotlist = freq_plots, 
+  ncol = 2, nrow = 2
+)
+
+# Print the grids
+print(count_grid)
+print(freq_grid)
+```
+
+Normalization of the data produced distributions that suggest most allele frequencies are concentrated near the lower end of the distribution with a few extreme outliers. The Pend Oreille and Sullivan watersheds contain narrow distributions for resident and migratory scenarios. The plot for the LeClerc watershed shows slightly more pronounced outliers for both scenarios, suggesting that certain generations or scenarios experienced significantly higher normalized allele counts #what does this mean?. Finally, the Tacoma watershed had the widest spread and the highest number of outliers, particularly in the migratory scenario. This indicates more variability in allele frequencies relative to the normalization factor. # what do you think this means in terms of the bioloyg? Similarities in distributions between resident and migratory scenarios indicates that normalizing the data does differentiate between the two life-history strategies. # But is that the goal of normalizing?  Why are we normalizing?
+
+To further examine the differences of different barrier scenarios on the normalized values of private alleles, we plotted each frequency for each barrier scenario faceted by watershed and resident versus migratory. In the future, using purrr formatting on the code would be best given the repetitiveness of the steps.
+
+```{r, echo=TRUE, eval = FALSE}
+
+##WATERSHED NORMALIZATION##
+wshed <- read_csv("WatershedIDsublevels.csv")
+wshed <- inner_join(test4_filter, wshed, by = "Stratum")
+
+sul_norm <- wshed %>%
+  filter(watershed == "Sullivan") %>%
+  select(Frequency, gen, Scenario, Barrier)
+
+sul_mean <- mean(sul_norm$Frequency)
+sul_mean <- setNames(sul_mean, "sul_mean")
+
+tac_norm <- wshed %>%
+  filter(watershed == "Tacoma") %>%
+  select(Frequency, gen, Scenario, Barrier)
+
+tac_mean <- mean(tac_norm$Frequency)
+tac_mean <- setNames(tac_mean, "tac_mean")
+
+lec_norm <- wshed %>%
+  filter(watershed == "LeClerc") %>%
+  select(Frequency, gen, Scenario, Barrier)
+
+lec_mean <- mean(lec_norm$Frequency)
+lec_mean <- setNames(lec_mean, "lec_mean")
+
+pen_norm <- wshed %>%
+  filter(watershed == "PendOreilleMS") %>%
+  select(Frequency, gen, Scenario, Barrier)
+
+pen_mean <- mean(pen_norm$Frequency)
+pen_mean <- setNames(pen_mean, "pen_mean")
+
+#Sullivan Count Norm.
+remove_watershed_sul <- (tac_mean + lec_mean + pen_mean) - sul_mean
+
+sul_norm_results <- data.frame(gen = character(),
+                               Normalization = numeric(),
+                               Count = numeric(),
+                               Scenario = factor(),
+                               Barrier = factor())
+
+for (i in 1:nrow(sul_norm)) {
+  sul_norm_count <- sul_norm$Frequency[i]
+  sul_norm_gen <- sul_norm$gen[i]
+  sul_norm_scen <- sul_norm$Scenario[i]
+  sul_norm_barr <- sul_norm$Barrier[i]
+  
+  sul_norm_calc <- sul_norm$Frequency[i] / remove_watershed_sul
+  
+  sul_norm_results <- rbind(sul_norm_results, data.frame(gen = sul_norm_gen, Normalization = sul_norm_calc, Count = sul_norm_count, Scenario = sul_norm_scen, Barrier = sul_norm_barr))
+}
+
+#Tacoma Count Norm.
+remove_watershed_tac <- (sul_mean + lec_mean + pen_mean) - tac_mean
+
+tac_norm_results <- data.frame(gen = character(),
+                               Normalization = numeric(),
+                               Count = numeric(),
+                               Scenario = factor(),
+                               Barrier = factor())
+
+for (i in 1:nrow(tac_norm)) {
+  tac_norm_count <- tac_norm$Frequency[i]
+  tac_norm_gen <- tac_norm$gen[i]
+  tac_norm_scen <- tac_norm$Scenario[i]
+  tac_norm_barr <- tac_norm$Barrier[i]
+  
+  tac_norm_calc <- tac_norm$Frequency[i] / remove_watershed_tac
+  
+  tac_norm_results <- rbind(tac_norm_results, data.frame(gen = tac_norm_gen, Normalization = tac_norm_calc, Count = tac_norm_count, Scenario = tac_norm_scen, Barrier = tac_norm_barr))
+}
+
+
+#LeClerc Count Norm.
+remove_watershed_lec <- (tac_mean + sul_mean + pen_mean) - lec_mean
+
+lec_norm_results <- data.frame(gen = character(),
+                               Normalization = numeric(),
+                               Count = numeric(),
+                               Scenario = factor(),
+                               Barrier = factor())
+
+for (i in 1:nrow(lec_norm)) {
+  lec_norm_count <- lec_norm$Frequency[i]
+  lec_norm_gen <- lec_norm$gen[i]
+  lec_norm_scen <- lec_norm$Scenario[i]
+  lec_norm_barr <- lec_norm$Barrier[i]
+  
+  lec_norm_calc <- lec_norm$Frequency[i] / remove_watershed_lec
+  
+  lec_norm_results <- rbind(lec_norm_results, data.frame(gen = lec_norm_gen, Normalization = lec_norm_calc, Count = lec_norm_count, Scenario = lec_norm_scen, Barrier = lec_norm_barr))
+}
+
+
+#Pend Count Norm.
+remove_watershed_pen <- (sul_mean + lec_mean + tac_mean) - pen_mean
+
+pen_norm_results <- data.frame(gen = character(),
+                               Normalization = numeric(),
+                               Count = numeric(),
+                               Scenario = factor(),
+                               Barrier = factor())
+
+for (i in 1:nrow(pen_norm)) {
+  pen_norm_count <- pen_norm$Frequency[i]
+  pen_norm_gen <- pen_norm$gen[i]
+  pen_norm_scen <- pen_norm$Scenario[i]
+  pen_norm_barr <- pen_norm$Barrier[i]
+  
+  pen_norm_calc <- pen_norm$Frequency[i] / remove_watershed_pen
+  
+  pen_norm_results <- rbind(pen_norm_results, data.frame(gen = pen_norm_gen, Normalization = pen_norm_calc, Count = pen_norm_count, Scenario = pen_norm_scen, Barrier = pen_norm_barr))
+}
+#all watersheds norm
+wshed_norm <- wshed %>%
+  select(Frequency, gen, Scenario, Barrier)
+
+all_watershed_mean <- (tac_mean + lec_mean + pen_mean + sul_mean)
+
+wshed_norm_results <- data.frame(gen = character(),
+                               Normalization = numeric(),
+                               Count = numeric(),
+                               Scenario = factor(),
+                               Barrier = factor())
+
+for (i in 1:nrow(wshed_norm)) {
+  wshed_norm_count <- wshed_norm$Frequency[i]
+  wshed_norm_gen <- wshed_norm$gen[i]
+  wshed_norm_scen <- wshed_norm$Scenario[i]
+  wshed_norm_barr <- wshed_norm$Barrier[i]
+  
+  wshed_norm_calc <- wshed_norm$Frequency[i] / all_watershed_mean
+  
+  wshed_norm_results <- rbind(wshed_norm_results, data.frame(gen = wshed_norm_gen, Normalization = wshed_norm_calc, Count = wshed_norm_count, Scenario = wshed_norm_scen, Barrier = wshed_norm_barr))
+}
+
+#plots
+resident_plot_wshed <- ggplot(wshed_norm_results %>% filter(Scenario == "Resident"), 
+                            aes(x = Barrier, y = Normalization, fill = Scenario)) +
+  geom_violin(trim = FALSE) +
+  theme_bw() +
+  labs(title = "All Normalized Frequencies (Resident)",
+       y = "Normalized Frequencies",
+       x = "Barrier Type") +
+  scale_fill_manual(values = colors)
+
+# Plot for Migratory scenario
+migratory_plot_wshed <- ggplot(wshed_norm_results %>% filter(Scenario == "Migratory"), 
+                             aes(x = Barrier, y = Normalization, fill = Scenario)) +
+  geom_violin(trim = FALSE) +
+  theme_bw() +
+  labs(title = "All Normalized Frequencies (Migratory)",
+       y = "Normalized Frequencies",
+       x = "Barrier Type") +
+  scale_fill_manual(values = colors)
+resident_plot_sul <- ggplot(sul_norm_results %>% filter(Scenario == "Resident"), 
+                            aes(x = Barrier, y = Normalization, fill = Scenario)) +
+  geom_violin(trim = FALSE) +
+  theme_bw() +
+  labs(title = "Sullivan Normalized Frequencies (Resident)",
+       y = "Normalized Frequencies",
+       x = "Barrier Type") +
+  scale_fill_manual(values = colors)
+
+# Plot for Migratory scenario
+migratory_plot_sul <- ggplot(sul_norm_results %>% filter(Scenario == "Migratory"), 
+                             aes(x = Barrier, y = Normalization, fill = Scenario)) +
+  geom_violin(trim = FALSE) +
+  theme_bw() +
+  labs(title = "Sullivan Normalized Frequencies (Migratory)",
+       y = "Normalized Frequencies",
+       x = "Barrier Type") +
+  scale_fill_manual(values = colors)
+resident_plot_tac <- ggplot(tac_norm_results %>% filter(Scenario == "Resident"), 
+                            aes(x = Barrier, y = Normalization, fill = Scenario)) +
+  geom_violin(trim = FALSE) +
+  theme_bw() +
+  labs(title = "Tacoma Normalized Frequencies (Resident)",
+       y = "Normalized Frequencies",
+       x = "Barrier Type") +
+  scale_fill_manual(values = colors)
+
+# Plot for Migratory scenario
+migratory_plot_tac <- ggplot(tac_norm_results %>% filter(Scenario == "Migratory"), 
+                             aes(x = Barrier, y = Normalization, fill = Scenario)) +
+  geom_violin(trim = FALSE) +
+  theme_bw() +
+  labs(title = "Tacoma Normalized Frequencies (Migratory)",
+       y = "Normalized Frequencies",
+       x = "Barrier Type") +
+  scale_fill_manual(values = colors)
+resident_plot_lec <- ggplot(lec_norm_results %>% filter(Scenario == "Resident"), 
+                            aes(x = Barrier, y = Normalization, fill = Scenario)) +
+  geom_violin(trim = FALSE) +
+  theme_bw() +
+  labs(title = "LeClerc Normalized Frequencies (Resident)",
+       y = "Normalized Frequencies",
+       x = "Barrier Type") +
+  scale_fill_manual(values = colors)
+
+# Plot for Migratory scenario
+migratory_plot_lec <- ggplot(lec_norm_results %>% filter(Scenario == "Migratory"), 
+                             aes(x = Barrier, y = Normalization, fill = Scenario)) +
+  geom_violin(trim = FALSE) +
+  theme_bw() +
+  labs(title = "LeClerc Normalized Frequencies (Migratory)",
+       y = "Normalized Frequencies",
+       x = "Barrier Type") +
+  scale_fill_manual(values = colors)
+resident_plot_pen <- ggplot(pen_norm_results %>% filter(Scenario == "Resident"), 
+                        aes(x = Barrier, y = Normalization, fill = Scenario)) +
+  geom_violin(trim = FALSE) +
+  theme_bw() +
+  labs(title = "Pend Oreille Normalized Frequencies (Resident)",
+       y = "Normalized Frequencies",
+       x = "Barrier Type") +
+  scale_fill_manual(values = colors)
+
+# Plot for Migratory scenario
+migratory_plot_pen <- ggplot(pen_norm_results %>% filter(Scenario == "Migratory"), 
+                        aes(x = Barrier, y = Normalization, fill = Scenario)) +
+  geom_violin(trim = FALSE) +
+  theme_bw() +
+  labs(title = "Pend Oreille Normalized Frequencies (Migratory)",
+       y = "Normalized Frequencies",
+       x = "Barrier Type") +
+  scale_fill_manual(values = colors)
+
+# Print the plots
+
+combined_plot_res <- grid.arrange(resident_plot_sul, resident_plot_tac, resident_plot_lec, resident_plot_pen, ncol = 2)
+combined_plot_mig <- grid.arrange(migratory_plot_sul, migratory_plot_tac, migratory_plot_lec, migratory_plot_pen, ncol = 2)
+
+```
+
+Normalized frequencies for the riverine was noticeably lower for the migratory scenario. This is intuitive given that a migratory life history strategy would lend itself to greater gene flow. 
+
+```{r, echo=TRUE, eval = FALSE}
+library(FactoMineR)
+library(factoextra)
+library(rgl)
+library(diptest)
+library(rticles)
+library(papaja)
+
+test4 <- test4 %>%
+       group_by(Stratum, Barrier) %>%
+       add_count(name = "Population") %>%  # Add total count of rows per group
+       ungroup()
+#Population Numbers
+
+wshed <- read_csv("WatershedIDsublevels.csv")
+pca.add <- inner_join(test4, wshed, by = "Stratum")
+pca.add <- pca.add %>% mutate(wshed_code = as.numeric(factor(watershed)))
+
+pca.dat <- pca.add %>% select(Stratum, Allele, Frequency, Batch, mcrun, gen, Allele_Count.y, wshed_code, Population)
+
+# get only numeric data in square matrix
+
+res.pca <- PCA(pca.dat, scale.unit = TRUE, graph = FALSE)
+# run PCA
+
+fviz_pca_ind(res.pca, geom.ind = "point", col.ind = pca.dat$Stratum)
+fviz_pca_ind(res.pca, geom.ind = "point", col.ind = test4$Barrier)
+fviz_pca_ind(res.pca, geom.ind = "point", col.ind = test4$Scenario)
+fviz_pca_ind(res.pca, geom.ind = "point", col.ind = test4$source)
+fviz_pca_ind(res.pca, geom.ind = "point", col.ind = pca.dat$gen)
+fviz_pca_ind(res.pca, geom.ind = "point", col.ind = pca.dat$Frequency)
+fviz_pca_ind(res.pca, geom.ind = "point", col.ind = pca.dat$Allele)
+fviz_pca_biplot(res.pca, geom.ind = "point", col.ind = pca.dat$Population)
+
+# plot eigenvalues by various variables.
+
+fviz_eig(res.pca, addlabels = TRUE, ylim = c(0, 50))
+# scree plot of dimensions
+
+var <- get_pca_var(res.pca)
+var <- var$contrib
+# get variables contributing to dimensions.
+
+fviz_contrib(res.pca, choice = "var", axes = 1, top = 10)
+# contributing variables to dimension 1
+
+fviz_contrib(res.pca, choice = "var", axes = 2, top = 10)
+# contributing variables to dimension 2
+
+fviz_contrib(res.pca, choice = "var", axes = 3, top = 10)
+# contributing variables to dimension 3
+
+colors <- colorRampPalette(c("blue", "red", "green"))(length(pca.dat$Population))
+point_colors <- colors[as.numeric(cut(test4$Frequency, breaks = length(pca.dat$Population)))]
+# Match colors to Frequency values
+
+
+rgl::plot3d(res.pca$ind$contrib, col = point_colors)
+# Plot with colors assigned
+
+rgb_colors <- col2rgb(point_colors)
+# Convert hex colors to RGB
+
+greenish_indices <- which(rgb_colors[1, ] < 100 &    
+                            rgb_colors[2, ] > 150 &    
+                            rgb_colors[3, ] < 100)     
+# Define thresholds for "greenish" colors
+
+if (length(greenish_indices) > 0) {
+  green_contrib <- res.pca$ind$contrib[greenish_indices, ]
+  rgl::plot3d(green_contrib, col = "green", size = 5)  
+} else {
+  cat("No greenish points found.\n")
+}
+
+green_indices <- which(row.names(pca.dat) %in% row.names(green_contrib))
+green_info <- pca.dat[green_indices, ]
+#extracting corresponding rows from test4
+
+pca.dat.green <- green_info %>% select(Stratum, Allele, Frequency, Batch, mcrun, gen, Allele_Count.y, wshed_code)
+
+
+res.pca.green <- PCA(pca.dat.green, scale.unit = TRUE, graph = FALSE)
+fviz_pca_biplot(res.pca.green, geom.ind = "point")
+
+#Analysis Without Green Points
+pca.dat.no_green <- pca.dat[-green_indices, ]
+
+
+frequency_no_green <- pca.dat$Frequency[-green_indices]  # Remove green frequencies
+
+res.pca.no_green <- PCA(pca.dat.no_green, scale.unit = TRUE, graph = FALSE)
+
+fviz_pca_biplot(res.pca.no_green, geom.ind = "point", col.ind = frequency_no_green)
+
+#Examining bimodal distribution in PCA
+dip.test(pca.dat$Frequency)
+
+kmeans_result <- kmeans(pca.dat$Frequency, centers = 3)
+pca.dat$Cluster <- as.factor(kmeans_result$cluster)
+ggplot(data.frame(Frequency = pca.dat$Frequency, Cluster = pca.dat$Cluster), aes(x = Frequency, fill = Cluster)) +
+       geom_density(alpha = 0.5) +
+       labs(title = "Clustered Density of Frequency", x = "Frequency", fill = "Cluster")
+
+pca.dat$Cluster <- as.factor(kmeans_result$cluster)
+
+fviz_pca_ind(res.pca, geom.ind = "point", col.ind = pca.dat$Cluster)
+
+ggplot(data.frame(Frequency = pca.dat$Frequency, Group = test4$Scenario), aes(x = Frequency, fill = Group)) +
+     geom_density(alpha = 0.5) +
+     labs(title = "Density of Frequency by Group", x = "Frequency", fill = "Group")
+
+```
+
+A PCA was then performed for allele frequencies followed by a k-means cluster analysis. The PCA for allele frequencies highlighted two unique patterns in the data: a cluster on the far end of Dimension 1 and a noticeable split in points slightly past the origin. Examinations of the
+data found that the cluster was caused by populations in which size (within patch) led them to result in a value of 0.5 for allele frequency. This is an artifact due to parameters within the model.
+
+The reasons for the divide down the center of the graph remain unclear but a k-means cluster analysis showed three distinct clusters within the data that warrant further
+exploration.
+

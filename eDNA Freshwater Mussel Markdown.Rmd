@@ -1,0 +1,93 @@
+---
+title: "Mussel eDNA Pipeline"
+author: "Nicholas Duellman"
+lab: "Jameson Hinkle Lab"
+date: "2024-11-11"
+output: html_document
+---
+
+## Packages
+
+Bioconductor: <https://bioconductor.org/install/>
+
+DADA2: <https://benjjneb.github.io/dada2/tutorial.html>
+
+DECIPHER: <http://www2.decipher.codes/Tutorials.html>
+
+DECIPHER Documentation: <http://www2.decipher.codes/Documentation/Documentation-Manual.html>
+
+Biostrings: <https://bioconductor.org/packages/release/bioc/html/Biostrings.html>
+
+The following code demonstrates a 16s single read pipeline using dada2 for trimming and formatting and DECIPHER for taxonomic identification of 16s gene among freshwater mussel environmental DNA (eDNA) samples. Code is optimized for R 4.3.1
+
+```{dada2 single read sequence work flow, echo = FALSE}
+
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+
+library(dada2); packageVersion(dada2)
+install.packages(dada2)
+
+
+```
+
+> Bioconductor software and dada2 package installation
+
+```{dada2 single read sequence work flow, echo = FALSE}
+
+dataset <- "C:/Users/nickd/Desktop/Freshwater Mussel Project/MiSeq_SOP" 
+
+list.files(dataset)
+
+```
+
+> change path depending on file location - import FASTQ files
+
+```{dada2 single read sequence work flow, echo = FALSE}
+
+fnFs <- sort(list.files(dataset, pattern="_R1_001.fastq", full.names = TRUE))
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+plotQualityProfile(fnFs[1:2])
+
+                
+                   
+filtFs <- file.path(dataset, "filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+names(filtFs) <- sample.names
+out <- filterAndTrim(fnFs, filtFs, truncLen=c(240),
+                     maxN=0, maxEE=c(2), truncQ=2, rm.phix=TRUE,
+                     compress=TRUE, multithread=FALSE)
+head(out)
+
+```
+
+> Determine quality of reads and adjust truncLen depending on quality.Speed up downstream computation, tighten or relax maxEE. Reduce truncLen to remove low quality reads if too few are passing through. Set multithread to FALSE when using Windows OS.
+
+```{dada2 single read sequence work flow, echo = FALSE}
+
+errF <- learnErrors(filtFs, multithread = FALSE)
+plotErrors(errF, nominalQ=TRUE)
+dadaFs <- dada(filtFs, err=errF, multithread = FALSE) 
+seqtab <- makeSequenceTable(dadaFs)
+dim(seqtab)
+table(nchar(getSequences(seqtab)))
+
+seqtab.nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=TRUE, verbose=TRUE)
+dim(seqtab.nochim)
+sum(seqtab.nochim)/sum(seqtab)
+
+track <- cbind(out, getN(dadaFs), rowSums(seqtab.nochim))
+sample.names <- rownames(track)
+head(track)
+
+```
+
+> The previous code generates a sequence table, removes chimeras and check reads that make it through pipeline
+
+#low quality reads.
+
+## Incite Paper - Introduction
+
+## Decipher Package - Taxonomy
+
+<http://www2.decipher.codes/>
