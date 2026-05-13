@@ -1,4 +1,4 @@
-# eDNA Pipeline — Two-Page Shiny App
+# eDNA Pipeline -- Two-Page Shiny App
 # ui.R
 
 library(shiny)
@@ -22,10 +22,10 @@ ui <- fluidPage(
       });
     ")),
     tags$style(HTML("
-    /* ── Page shell ── */
+    /* -- Page shell -- */
     body { background: #f4f6f9; font-family: 'Georgia', serif; }
 
-    /* ── Top nav bar ── */
+    /* -- Top nav bar -- */
     .edna-nav {
       display: flex;
       align-items: center;
@@ -58,7 +58,7 @@ ui <- fluidPage(
     .edna-nav .nav-btn:hover  { background: #243f5c; color: #fff; }
     .edna-nav .nav-btn.active { background: #7ecfb3; color: #1a2e44; font-weight: bold; }
 
-    /* ── Section cards ── */
+    /* -- Section cards -- */
     .card {
       background: #fff;
       border-radius: 8px;
@@ -75,7 +75,7 @@ ui <- fluidPage(
       letter-spacing: .04em;
     }
 
-    /* ── Run button ── */
+    /* -- Run button -- */
     .run-btn {
       background: #1a2e44 !important;
       color: #7ecfb3 !important;
@@ -90,10 +90,10 @@ ui <- fluidPage(
     }
     .run-btn:hover { background: #243f5c !important; }
 
-    /* ── Download button ── */
+    /* -- Download button -- */
     .dl-btn { margin-top: 10px; width: 100%; }
 
-    /* ── Status box ── */
+    /* -- Status box -- */
     .status-box {
       background: #eaf7f2;
       border-left: 4px solid #7ecfb3;
@@ -109,7 +109,7 @@ ui <- fluidPage(
 
   # ---------- Nav bar ----------
   div(class = "edna-nav",
-    span(class = "brand", "🧬 eDNA Pipeline"),
+    span(class = "brand", " eDNA Pipeline"),
     actionButton("go_builder",  "Barcode Builder",  class = "nav-btn active"),
     actionButton("go_identify", "Identify Taxa",    class = "nav-btn")
   ),
